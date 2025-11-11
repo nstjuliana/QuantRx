@@ -1,10 +1,17 @@
 /**
  * API Route: /api/auth
  *
- * Handles Auth0 authentication callbacks and session management.
- * This route is automatically handled by Auth0 SDK.
+ * This route is not used directly. Auth0 routes are handled by:
+ * - /api/auth/login - Login initiation
+ * - /api/auth/logout - Logout
+ * - /api/auth/callback - OAuth callback
+ * - /api/auth/me - User profile (handled by Auth0 SDK)
  */
 
-import { handleAuth } from '@auth0/nextjs-auth0';
+import { NextResponse } from 'next/server';
 
-export const GET = handleAuth();
+export async function GET() {
+  return NextResponse.json({
+    message: 'Auth0 routes are available at /api/auth/login, /api/auth/logout, and /api/auth/callback',
+  });
+}
