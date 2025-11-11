@@ -29,34 +29,48 @@ CREATE INDEX idx_users_created_at ON users(created_at);
 -- Enable Row Level Security on users table
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 
+-- Create a security definer function to check if current user is admin
+-- This function bypasses RLS to avoid infinite recursion
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS BOOLEAN AS $$
+DECLARE
+  user_auth0_id TEXT;
+  user_role TEXT;
+BEGIN
+  -- Get the auth0_id from JWT claims
+  user_auth0_id := current_setting('request.jwt.claims', true)::json->>'sub';
+  
+  -- If no auth0_id, user is not authenticated
+  IF user_auth0_id IS NULL THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Check role directly from users table (bypasses RLS due to SECURITY DEFINER)
+  SELECT role INTO user_role
+  FROM users
+  WHERE auth0_id = user_auth0_id;
+  
+  -- Return true if role is admin
+  RETURN user_role = 'admin';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Create RLS policies for users table
 -- Users can read their own data
 CREATE POLICY "Users can view own data" ON users
   FOR SELECT USING (auth0_id = current_setting('request.jwt.claims', true)::json->>'sub');
 
--- Admins can read all user data
+-- Admins can read all user data (uses function to avoid recursion)
 CREATE POLICY "Admins can view all users" ON users
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE auth0_id = current_setting('request.jwt.claims', true)::json->>'sub'
-      AND role = 'admin'
-    )
-  );
+  FOR SELECT USING (is_admin());
 
 -- Users can update their own data
 CREATE POLICY "Users can update own data" ON users
   FOR UPDATE USING (auth0_id = current_setting('request.jwt.claims', true)::json->>'sub');
 
--- Admins can update all user data
+-- Admins can update all user data (uses function to avoid recursion)
 CREATE POLICY "Admins can update all users" ON users
-  FOR UPDATE USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE auth0_id = current_setting('request.jwt.claims', true)::json->>'sub'
-      AND role = 'admin'
-    )
-  );
+  FOR UPDATE USING (is_admin());
 
 -- Function to automatically update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -109,15 +123,9 @@ CREATE POLICY "Users can view own calculations" ON calculations
     )
   );
 
--- Admins can view all calculations
+-- Admins can view all calculations (uses function to avoid recursion)
 CREATE POLICY "Admins can view all calculations" ON calculations
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE auth0_id = current_setting('request.jwt.claims', true)::json->>'sub'
-      AND role = 'admin'
-    )
-  );
+  FOR SELECT USING (is_admin());
 
 -- Users can insert their own calculations
 CREATE POLICY "Users can create calculations" ON calculations
@@ -137,15 +145,9 @@ CREATE POLICY "Users can update own calculations" ON calculations
     )
   );
 
--- Admins can update all calculations
+-- Admins can update all calculations (uses function to avoid recursion)
 CREATE POLICY "Admins can update all calculations" ON calculations
-  FOR UPDATE USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE auth0_id = current_setting('request.jwt.claims', true)::json->>'sub'
-      AND role = 'admin'
-    )
-  );
+  FOR UPDATE USING (is_admin());
 
 -- Create trigger to automatically update updated_at for calculations
 CREATE TRIGGER update_calculations_updated_at
