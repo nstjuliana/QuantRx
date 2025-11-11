@@ -20,6 +20,7 @@ NDC Packaging & Quantity Calculator - AI-accelerated tool for matching prescript
 2. **Install dependencies:**
    ```bash
    npm install
+   npm install --save-dev node-fetch  # For integration tests
    ```
 
 3. **Set up environment variables:**
@@ -42,8 +43,8 @@ Execute the SQL commands in `lib/database-schema.sql` in your Supabase SQL Edito
 Required environment variables (see `.env.example`):
 
 - `AUTH0_SECRET` - Auth0 session encryption secret
-- `AUTH0_BASE_URL` - Application base URL
-- `AUTH0_ISSUER_BASE_URL` - Auth0 issuer URL
+- `AUTH0_BASE_URL` - Application base URL (e.g., `http://localhost:3000`)
+- `AUTH0_ISSUER_BASE_URL` - Auth0 issuer URL (e.g., `https://your-tenant.auth0.com`)
 - `AUTH0_CLIENT_ID` - Auth0 application client ID
 - `AUTH0_CLIENT_SECRET` - Auth0 application client secret
 - `SUPABASE_URL` - Supabase project URL
@@ -83,7 +84,50 @@ npm run lint
 
 # Format code with Prettier
 npm run format
+
+# Test foundation features
+npm run test:foundation
+
+# Test deployed app (requires npm run dev to be running)
+npm run test:integration
 ```
+
+## Testing
+
+### Foundation Tests
+
+The `test-core.js` script tests all core calculation logic in isolation:
+
+- ✅ **Schema Validation** - Zod schemas for form validation
+- ✅ **SIG Parsing** - Prescription directions parsing
+- ✅ **Quantity Calculation** - Dose × frequency × days supply
+- ✅ **NDC Matching Algorithm** - Optimal package selection
+- ✅ **End-to-End Workflow** - Complete calculation pipeline
+
+**Run the tests:**
+```bash
+npm run test:foundation
+```
+
+Expected output: 5/5 tests passed ✅
+
+### Integration Tests
+
+The `test-integration.js` script tests the deployed application on `localhost:3000`:
+
+- ✅ **Server Health Check** - Verifies dev server is running
+- ✅ **RxNorm API** - Tests drug search and normalization endpoints
+- ✅ **FDA API** - Tests NDC lookup and validation endpoints
+- ✅ **Error Handling** - Tests invalid inputs and error responses
+- ✅ **Response Format** - Validates API response structure
+
+**Prerequisites:**
+1. Start the dev server: `npm run dev`
+2. Run integration tests in another terminal: `npm run test:integration`
+
+**Expected output:** 10/10 tests passed ✅ (when server is running)
+
+**Note:** Integration tests require the application to be running and will fail if the server isn't available.
 
 ## Project Structure
 
@@ -106,11 +150,35 @@ quantrx/
 
 ## Current Status
 
-This is Phase 0 (Setup) of the QuantRx project. The application infrastructure is complete with:
+**Phase 1 MVP Foundation Complete! 🎉**
 
-- ✅ Authentication (Auth0)
-- ✅ Database (Supabase with RLS)
-- ✅ UI Framework (Material-UI theme)
-- ✅ Error handling and loading states
+The foundation infrastructure is fully implemented and tested:
 
-Phase 1 will implement the core calculation features and API integrations.
+### ✅ **Foundation & Infrastructure**
+- ✅ Type definitions and validation schemas (JSDoc + Zod)
+- ✅ Observability & logging infrastructure
+- ✅ Database schema with audit logging and RLS policies
+
+### ✅ **API Integrations**
+- ✅ RxNorm API integration with mock mode support
+- ✅ FDA NDC Directory API integration with mock mode support
+- ✅ TanStack Query hooks and caching strategies
+
+### ✅ **Calculation Engine**
+- ✅ SIG parsing with regex patterns (extensible for Phase 2 AI)
+- ✅ Quantity calculation (dose × frequency × days supply)
+- ✅ NDC matching algorithm with tolerance logic
+- ✅ Calculation service orchestration layer
+- ✅ Comprehensive unit tests and integration tests
+
+### 🚀 **Ready for UI Integration**
+Phase 1 continues with UI components (Features 2-17):
+- Calculation input forms
+- Results display components
+- Export functionality
+- Role-based access control
+- Error handling flows
+
+**Test the foundation:** `npm run test:foundation`
+
+Expected output: 5/5 tests passed ✅

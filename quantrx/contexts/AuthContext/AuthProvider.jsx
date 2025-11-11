@@ -23,8 +23,9 @@ import { Auth0Provider } from '@auth0/nextjs-auth0/client';
 export function AuthProvider({ children }) {
   return (
     <Auth0Provider
+      baseURL={typeof window !== 'undefined' ? window.location.origin : undefined}
       authorizationParams={{
-        redirect_uri: typeof window !== 'undefined' ? window.location.origin + '/api/auth/callback' : undefined,
+        redirect_uri: typeof window !== 'undefined' ? `${window.location.origin}/api/auth/callback` : undefined,
       }}
     >
       {children}

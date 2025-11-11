@@ -3,13 +3,20 @@
  *
  * Tests Supabase connection by attempting a simple query.
  * Returns connection status and any errors.
+ * Requires authentication to prevent unauthorized access.
  *
  * @module app/api/test/supabase/route
  */
 
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/utils/auth';
 
-export async function GET() {
+export async function GET(request) {
+  // Check authentication
+  const authError = await requireAuth(request);
+  if (authError) {
+    return authError;
+  }
   try {
     // Import Supabase client (will fail if env vars are missing)
     const { supabase } = await import('@/lib/api/supabase');

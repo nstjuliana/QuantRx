@@ -13,7 +13,7 @@ import { z } from 'zod';
 const envSchema = z.object({
   AUTH0_SECRET: z.string().min(1, 'AUTH0_SECRET is required'),
   AUTH0_BASE_URL: z.string().url('AUTH0_BASE_URL must be a valid URL'),
-  AUTH0_ISSUER_BASE_URL: z.string().url('AUTH0_ISSUER_BASE_URL must be a valid URL'),
+  AUTH0_ISSUER_BASE_URL: z.string().min(1, 'AUTH0_ISSUER_BASE_URL is required'),
   AUTH0_CLIENT_ID: z.string().min(1, 'AUTH0_CLIENT_ID is required'),
   AUTH0_CLIENT_SECRET: z.string().min(1, 'AUTH0_CLIENT_SECRET is required'),
   SUPABASE_URL: z.string().url('SUPABASE_URL must be a valid URL'),
