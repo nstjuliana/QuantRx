@@ -8,10 +8,29 @@
  */
 
 import { auth0 } from '@/lib/auth0';
-import { NextRequest } from 'next/server';
 
 export async function GET(request) {
-  // Auth0 middleware handles fetching the session and returning user data
-  // The useUser hook calls this endpoint to get the current user
-  return auth0.middleware(request);
+  let sessionSummary = null;
+
+  try {
+    const session = await auth0.getSession();
+    sessionSummary = {
+      isAuthenticated: Boolean(session),
+      hasUser: Boolean(session?.user),
+    };
+  } catch (error) {
+    console.warn('[api/auth/me] Failed to read session before middleware', error);
+  }
+
+  if (sessionSummary) {
+    console.log('[api/auth/me] Session snapshot', sessionSummary);
+  }
+
+  const response = await auth0.middleware(request);
+
+  console.log('[api/auth/me] Response dispatched', {
+    status: response.status,
+  });
+
+  return response;
 }

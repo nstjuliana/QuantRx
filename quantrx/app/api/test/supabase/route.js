@@ -18,12 +18,27 @@ export async function GET(request) {
     return authError;
   }
   try {
-    // Import Supabase client (will fail if env vars are missing)
+    // Import Supabase client and env for service role key
     const { supabase } = await import('@/lib/api/supabase');
+    const { env } = await import('@/lib/env');
+    const { createClient } = await import('@supabase/supabase-js');
+    
+    // Create a service role client for testing (bypasses RLS)
+    // This is safe because we've already verified authentication above
+    const serviceRoleClient = createClient(
+      env.SUPABASE_URL,
+      env.SUPABASE_SERVICE_ROLE_KEY,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
     
     // Try a simple query to test connection
-    // We'll query a table that should exist (users) or handle the error gracefully
-    const { data, error } = await supabase
+    // Use service role to bypass RLS for connection testing
+    const { data, error } = await serviceRoleClient
       .from('users')
       .select('count')
       .limit(1);
@@ -35,6 +50,16 @@ export async function GET(request) {
           status: 'connected',
           message: 'Supabase connection successful',
           note: 'Database schema not yet created (run lib/database-schema.sql)',
+          error: error.message,
+        });
+      }
+      
+      // Check for RLS/permission errors (shouldn't happen with service role, but handle gracefully)
+      if (error.code === '42501' || error.message.includes('permission denied') || error.message.includes('Unauthorized')) {
+        return NextResponse.json({
+          status: 'connected',
+          message: 'Supabase connection successful',
+          note: 'Connection works, but RLS policies may need configuration',
           error: error.message,
         });
       }

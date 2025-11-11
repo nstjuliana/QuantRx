@@ -6,13 +6,26 @@
  */
 
 import { auth0 } from '@/lib/auth0';
-import { NextRequest } from 'next/server';
 
 export async function GET(request) {
-  // Auth0 middleware handles:
-  // 1. Processing the OAuth callback
-  // 2. Creating the session cookie
-  // 3. Redirecting to the returnTo URL or home page
-  return auth0.middleware(request);
+  const state = request.nextUrl.searchParams.get('state');
+  const code = request.nextUrl.searchParams.get('code');
+  const returnTo = request.nextUrl.searchParams.get('returnTo');
+
+  console.log('[api/auth/callback] Received Auth0 callback', {
+    hasCode: Boolean(code),
+    hasState: Boolean(state),
+    returnTo,
+    pathname: request.nextUrl.pathname,
+  });
+
+  const response = await auth0.middleware(request);
+
+  console.log('[api/auth/callback] Completed Auth0 callback', {
+    status: response.status,
+    location: response.headers.get('location'),
+  });
+
+  return response;
 }
 

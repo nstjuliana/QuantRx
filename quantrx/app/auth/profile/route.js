@@ -9,9 +9,17 @@
  */
 
 import { NextResponse } from 'next/server';
+import { env } from '@/lib/env';
 
-export async function GET() {
-  // Redirect to the correct Auth0 profile endpoint
-  // The handleAuth() in /api/auth/route.js provides /api/auth/me
-  return NextResponse.redirect(new URL('/api/auth/me', process.env.AUTH0_BASE_URL || 'http://localhost:3000'), 307);
+export async function GET(request) {
+  // Determine the correct origin to avoid hard-coded localhost redirects
+  const fallbackOrigin = request.nextUrl?.origin ?? env.AUTH0_BASE_URL;
+  const profileUrl = new URL('/api/auth/me', env.AUTH0_BASE_URL || fallbackOrigin);
+
+  console.log('[auth/profile] Redirecting to profile endpoint', {
+    requestOrigin: request.nextUrl?.origin,
+    target: profileUrl.toString(),
+  });
+
+  return NextResponse.redirect(profileUrl, 307);
 }

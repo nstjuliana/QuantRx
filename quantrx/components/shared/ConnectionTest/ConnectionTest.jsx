@@ -18,7 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
  * @returns {JSX.Element} Connection test results display
  */
 export function ConnectionTest() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
   const [supabaseStatus, setSupabaseStatus] = useState('testing');
   const [auth0Status, setAuth0Status] = useState('testing');
   const [supabaseError, setSupabaseError] = useState(null);
@@ -26,10 +26,26 @@ export function ConnectionTest() {
 
   // Test Supabase connection
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setSupabaseStatus('error');
+      setSupabaseError('Sign in to verify Supabase connectivity');
+      return;
+    }
+
+    setSupabaseStatus('testing');
+    setSupabaseError(null);
+
     async function testSupabase() {
       try {
         // Call API route to test Supabase connection
-        const response = await fetch('/api/test/supabase');
+        // Include credentials to send cookies (required for Auth0 session)
+        const response = await fetch('/api/test/supabase', {
+          credentials: 'include',
+        });
         const result = await response.json();
         
         if (result.status === 'connected') {
@@ -46,14 +62,17 @@ export function ConnectionTest() {
     }
 
     testSupabase();
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   // Test Auth0 connection
   useEffect(() => {
     async function testAuth0() {
       try {
         // Test if Auth0 API endpoint is accessible
-        const response = await fetch('/api/auth/me');
+        // Include credentials to send cookies (required for Auth0 session)
+        const response = await fetch('/api/auth/me', {
+          credentials: 'include',
+        });
         
         if (response.ok || response.status === 401) {
           // 401 is expected if not authenticated, but means Auth0 is working

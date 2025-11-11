@@ -21,5 +21,13 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'SUPABASE_SERVICE_ROLE_KEY is required'),
 });
 
+const computedEnv = {
+  ...process.env,
+  // In Vercel deployments, derive AUTH0_BASE_URL from VERCEL_URL if not explicitly set
+  AUTH0_BASE_URL:
+    process.env.AUTH0_BASE_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined),
+};
+
 // Parse and export - will throw error if validation fails
-export const env = envSchema.parse(process.env);
+export const env = envSchema.parse(computedEnv);
