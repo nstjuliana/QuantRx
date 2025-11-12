@@ -410,17 +410,17 @@ export async function POST(request) {
           
           if (fetchError || !existingUser) {
             console.error('[API] Failed to fetch existing user:', fetchError);
-            logEvent('API_ERROR', {
-              operation: 'CREATE_CALCULATION',
+      logEvent('API_ERROR', {
+        operation: 'CREATE_CALCULATION',
               error: 'Failed to fetch user record after creation attempt',
               userId,
               fetchError: fetchError?.message
-            });
+      });
 
-            return NextResponse.json(
+      return NextResponse.json(
               { error: 'User Error', message: 'Failed to retrieve user record' },
-              { status: 500 }
-            );
+        { status: 500 }
+      );
           }
           
           console.log('[API] Found existing user:', existingUser);
@@ -455,11 +455,14 @@ export async function POST(request) {
     }
 
     // Prepare database record
+    // If using direct quantity, provide a placeholder SIG since database requires it
+    const sigValue = input.sig || (input.quantity ? 'Direct quantity entry' : null);
+    
     const dbRecord = {
       user_id: userRecord.id,
       drug_name: input.drugName || null,
       ndc: input.ndc || null,
-      sig: input.sig,
+      sig: sigValue, // Use placeholder if direct quantity was used
       days_supply: input.daysSupply || null,
       calculated_quantity: calculationResult.calculation?.calculatedQuantity || null,
       rxcui: calculationResult.normalization?.rxcui || null,
@@ -468,6 +471,10 @@ export async function POST(request) {
       warnings: calculationResult.warnings ? JSON.stringify(calculationResult.warnings) : null,
       status: 'pending'
     };
+    
+    console.log('[API] Database record sig value:', sigValue);
+    console.log('[API] Input quantity:', input.quantity);
+    console.log('[API] Calculation result quantity:', calculationResult.calculation?.calculatedQuantity);
 
     console.log('[API] Preparing to insert calculation record...');
     console.log('[API] Database record:', JSON.stringify(dbRecord, null, 2));

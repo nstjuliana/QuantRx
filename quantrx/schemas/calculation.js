@@ -68,6 +68,10 @@ const validateSIG = (value) => {
 /**
  * Schema for calculation form inputs
  * Used by React Hook Form with Zod resolver
+ * 
+ * Supports two modes:
+ * 1. Calculated quantity: Requires SIG and daysSupply
+ * 2. Direct quantity: Requires quantity field, SIG and daysSupply are optional
  */
 export const CalculationFormSchema = z.object({
   drugName: z
@@ -88,40 +92,143 @@ export const CalculationFormSchema = z.object({
 
   sig: z
     .string()
-    .min(1, 'Directions are required')
-    .refine(
-      validateSIG,
-      'Directions must be 3-500 characters and contain meaningful content'
-    ),
+    .optional(),
 
   daysSupply: z
-    .number()
+    .union([z.number(), z.string()])
     .optional()
     .refine(
-      (value) => !value || (value >= 1 && value <= 365),
+      (value) => {
+        // Allow empty strings when quantity is provided (handled by parent refine)
+        if (value === '' || value === null || value === undefined) return true;
+        // If it's a string, try to parse it
+        const numValue = typeof value === 'string' ? parseInt(value, 10) : value;
+        if (isNaN(numValue)) return false;
+        return numValue >= 1 && numValue <= 365;
+      },
       'Days supply must be between 1 and 365 days'
+    ),
+
+  quantity: z
+    .union([z.number(), z.string()])
+    .optional()
+    .refine(
+      (value) => {
+        // Allow empty strings when SIG+daysSupply is provided (handled by parent refine)
+        if (value === '' || value === null || value === undefined) return true;
+        // If it's a string, try to parse it
+        const numValue = typeof value === 'string' ? parseInt(value, 10) : value;
+        if (isNaN(numValue)) return false;
+        return numValue > 0 && numValue <= 100000;
+      },
+      'Quantity must be between 1 and 100,000'
     )
 }).refine(
   (data) => data.drugName || data.ndc,
   {
     message: 'Either drug name or NDC is required',
-    path: ['drugName'] // Error will appear on drugName field
+    path: ['drugName']
+  }
+).refine(
+  (data) => {
+    // Normalize quantity and daysSupply values for comparison
+    const quantityValue = typeof data.quantity === 'string' 
+      ? (data.quantity === '' ? 0 : parseInt(data.quantity, 10))
+      : (data.quantity || 0);
+    const daysSupplyValue = typeof data.daysSupply === 'string'
+      ? (data.daysSupply === '' ? 0 : parseInt(data.daysSupply, 10))
+      : (data.daysSupply || 0);
+    
+    // Either quantity is provided OR (SIG and daysSupply are provided)
+    const hasQuantity = quantityValue > 0;
+    const hasSigAndDays = data.sig && data.sig.trim().length > 0 && daysSupplyValue > 0;
+    return hasQuantity || hasSigAndDays;
+  },
+  {
+    message: 'Either enter a quantity directly, or provide SIG and days supply to calculate quantity',
+    path: ['quantity']
+  }
+).refine(
+  (data) => {
+    // Normalize quantity value
+    const quantityValue = typeof data.quantity === 'string' 
+      ? (data.quantity === '' ? 0 : parseInt(data.quantity, 10))
+      : (data.quantity || 0);
+    const hasQuantity = quantityValue > 0;
+    
+    // If SIG is provided (and we're not using direct quantity), it must be valid
+    if (hasQuantity) {
+      return true; // SIG validation not needed when using direct quantity
+    }
+    if (data.sig && data.sig.trim().length > 0) {
+      return validateSIG(data.sig);
+    }
+    return true; // SIG is optional if quantity is provided
+  },
+  {
+    message: 'Directions must be 3-500 characters and contain meaningful content',
+    path: ['sig']
+  }
+).refine(
+  (data) => {
+    // Normalize quantity value
+    const quantityValue = typeof data.quantity === 'string' 
+      ? (data.quantity === '' ? 0 : parseInt(data.quantity, 10))
+      : (data.quantity || 0);
+    const hasQuantity = quantityValue > 0;
+    
+    // If quantity is provided, daysSupply validation is not needed
+    if (hasQuantity) {
+      return true;
+    }
+    
+    // Only validate daysSupply if it's provided and we're in calculated mode
+    if (data.daysSupply === '' || data.daysSupply === null || data.daysSupply === undefined) {
+      return true; // Empty is OK if quantity is provided (handled above)
+    }
+    
+    const daysSupplyValue = typeof data.daysSupply === 'string'
+      ? parseInt(data.daysSupply, 10)
+      : data.daysSupply;
+    
+    if (isNaN(daysSupplyValue)) return false;
+    return daysSupplyValue >= 1 && daysSupplyValue <= 365;
+  },
+  {
+    message: 'Days supply must be between 1 and 365 days',
+    path: ['daysSupply']
   }
 );
 
 /**
  * Schema for calculation API input (from frontend)
+ * 
+ * Supports two modes:
+ * 1. Calculated quantity: Requires SIG and daysSupply
+ * 2. Direct quantity: Requires quantity field, SIG and daysSupply are optional
  */
 export const CalculationInputSchema = z.object({
   drugName: z.string().optional(),
   ndc: z.string().optional(),
-  sig: z.string().min(1, 'Directions are required'),
-  daysSupply: z.number().optional()
+  sig: z.string().optional(),
+  daysSupply: z.number().optional(),
+  quantity: z.number().optional()
 }).refine(
   (data) => data.drugName || data.ndc,
   {
     message: 'Either drug name or NDC is required',
     path: ['drugName']
+  }
+).refine(
+  (data) => {
+    // Either quantity is provided OR (SIG and daysSupply are provided)
+    const hasQuantity = data.quantity && data.quantity > 0;
+    const hasSigAndDays = data.sig && data.sig.trim().length > 0 && data.daysSupply && data.daysSupply > 0;
+    return hasQuantity || hasSigAndDays;
+  },
+  {
+    message: 'Either enter a quantity directly, or provide SIG and days supply to calculate quantity',
+    path: ['quantity']
   }
 );
 

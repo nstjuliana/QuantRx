@@ -64,54 +64,87 @@ export async function runCalculation(input, options = {}) {
     
     console.log('[CALC-SERVICE] Normalization succeeded');
 
-    // Step 2: Parse SIG
-    console.log('[CALC-SERVICE] Step 2: Parsing SIG...');
-    console.log('[CALC-SERVICE] SIG input:', input.sig);
+    // Step 2: Parse SIG (only if quantity not provided directly)
+    let sigResult = { success: true, data: null, warnings: [] };
+    let quantityResult = { success: true, data: null, warnings: [] };
     
-    const sigResult = await parseSIGStep(input.sig, userId);
-    console.log('[CALC-SERVICE] SIG parsing result:', JSON.stringify(sigResult, null, 2));
+    // Check if quantity is provided directly
+    const hasDirectQuantity = input.quantity && input.quantity > 0;
     
-    if (!sigResult.success) {
-      console.log('[CALC-SERVICE] SIG parsing failed, creating error result');
-      const errorResult = createErrorResult(
-        'sig_parsing_failed',
-        sigResult.error,
-        { step: 'sig_parsing', input, normalization: normalizationResult.data }
-      );
-      console.log('[CALC-SERVICE] Error result created:', JSON.stringify(errorResult, null, 2));
-      return errorResult;
-    }
-    
-    console.log('[CALC-SERVICE] SIG parsing succeeded');
+    if (hasDirectQuantity) {
+      console.log('[CALC-SERVICE] Using direct quantity:', input.quantity);
+      console.log('[CALC-SERVICE] Direct quantity type:', typeof input.quantity);
+      console.log('[CALC-SERVICE] Direct quantity value:', input.quantity);
+      
+      // Ensure quantity is a number
+      const directQuantity = typeof input.quantity === 'string' 
+        ? parseInt(input.quantity, 10) 
+        : input.quantity;
+      
+      console.log('[CALC-SERVICE] Parsed direct quantity:', directQuantity);
+      
+      // Skip SIG parsing and quantity calculation
+      quantityResult = {
+        success: true,
+        data: {
+          quantity: directQuantity,
+          unit: 'units', // Default unit, could be enhanced later
+          calculation: `Direct quantity: ${directQuantity} units`
+        },
+        warnings: []
+      };
+      
+      console.log('[CALC-SERVICE] Quantity result data:', JSON.stringify(quantityResult.data, null, 2));
+    } else {
+      // Step 2: Parse SIG
+      console.log('[CALC-SERVICE] Step 2: Parsing SIG...');
+      console.log('[CALC-SERVICE] SIG input:', input.sig);
+      
+      sigResult = await parseSIGStep(input.sig, userId);
+      console.log('[CALC-SERVICE] SIG parsing result:', JSON.stringify(sigResult, null, 2));
+      
+      if (!sigResult.success) {
+        console.log('[CALC-SERVICE] SIG parsing failed, creating error result');
+        const errorResult = createErrorResult(
+          'sig_parsing_failed',
+          sigResult.error,
+          { step: 'sig_parsing', input, normalization: normalizationResult.data }
+        );
+        console.log('[CALC-SERVICE] Error result created:', JSON.stringify(errorResult, null, 2));
+        return errorResult;
+      }
+      
+      console.log('[CALC-SERVICE] SIG parsing succeeded');
 
-    // Step 3: Calculate quantity (if days supply provided)
-    console.log('[CALC-SERVICE] Step 3: Calculating quantity...');
-    console.log('[CALC-SERVICE] Days supply:', input.daysSupply);
-    
-    const quantityResult = await calculateQuantityStep(
-      sigResult.data,
-      input.daysSupply,
-      userId
-    );
-    console.log('[CALC-SERVICE] Quantity calculation result:', JSON.stringify(quantityResult, null, 2));
-    
-    if (!quantityResult.success) {
-      console.log('[CALC-SERVICE] Quantity calculation failed, creating error result');
-      const errorResult = createErrorResult(
-        'quantity_calculation_failed',
-        quantityResult.error,
-        {
-          step: 'quantity_calculation',
-          input,
-          normalization: normalizationResult.data,
-          sig: sigResult.data
-        }
+      // Step 3: Calculate quantity (if days supply provided)
+      console.log('[CALC-SERVICE] Step 3: Calculating quantity...');
+      console.log('[CALC-SERVICE] Days supply:', input.daysSupply);
+      
+      quantityResult = await calculateQuantityStep(
+        sigResult.data,
+        input.daysSupply,
+        userId
       );
-      console.log('[CALC-SERVICE] Error result created:', JSON.stringify(errorResult, null, 2));
-      return errorResult;
+      console.log('[CALC-SERVICE] Quantity calculation result:', JSON.stringify(quantityResult, null, 2));
+      
+      if (!quantityResult.success) {
+        console.log('[CALC-SERVICE] Quantity calculation failed, creating error result');
+        const errorResult = createErrorResult(
+          'quantity_calculation_failed',
+          quantityResult.error,
+          {
+            step: 'quantity_calculation',
+            input,
+            normalization: normalizationResult.data,
+            sig: sigResult.data
+          }
+        );
+        console.log('[CALC-SERVICE] Error result created:', JSON.stringify(errorResult, null, 2));
+        return errorResult;
+      }
+      
+      console.log('[CALC-SERVICE] Quantity calculation succeeded');
     }
-    
-    console.log('[CALC-SERVICE] Quantity calculation succeeded');
 
     // Step 4: Fetch NDCs
     console.log('[CALC-SERVICE] Step 4: Fetching NDCs...');

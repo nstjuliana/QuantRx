@@ -10,7 +10,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -55,9 +55,36 @@ export function CalculationForm({ onSubmit, loading = false, initialValues = {} 
       ndc: '',
       sig: '',
       daysSupply: '',
+      quantity: '',
       ...initialValues
     }
   });
+
+  // Watch form values to compute custom validation
+  const formValues = watch();
+  
+  // Custom validation check: form is valid if either quantity OR (SIG + daysSupply) is provided
+  const isFormValid = useMemo(() => {
+    // Check drug name or NDC requirement
+    const hasDrugOrNDC = (inputMode === 'drugName' && formValues.drugName?.trim()) ||
+                         (inputMode === 'ndc' && formValues.ndc?.trim());
+    
+    if (!hasDrugOrNDC) return false;
+    
+    // Check quantity OR (SIG + daysSupply)
+    // Handle both string and number types for quantity/daysSupply
+    const quantityValue = typeof formValues.quantity === 'string' 
+      ? (formValues.quantity === '' ? 0 : parseInt(formValues.quantity, 10))
+      : (formValues.quantity || 0);
+    const hasQuantity = quantityValue > 0;
+    
+    const daysSupplyValue = typeof formValues.daysSupply === 'string'
+      ? (formValues.daysSupply === '' ? 0 : parseInt(formValues.daysSupply, 10))
+      : (formValues.daysSupply || 0);
+    const hasSigAndDays = formValues.sig?.trim() && daysSupplyValue > 0;
+    
+    return hasQuantity || hasSigAndDays;
+  }, [formValues, inputMode]);
 
   // Watch inputMode to clear fields when switching
   const watchedInputMode = watch('inputMode');
@@ -94,11 +121,35 @@ export function CalculationForm({ onSubmit, loading = false, initialValues = {} 
     // Remove inputMode from submission data
     const { inputMode: _, ...submitData } = data;
     
+    // Normalize empty strings to undefined for API
+    if (submitData.sig === '' || !submitData.sig?.trim()) {
+      submitData.sig = undefined;
+    }
+    if (submitData.daysSupply === '' || submitData.daysSupply === null || submitData.daysSupply === undefined) {
+      submitData.daysSupply = undefined;
+    } else if (typeof submitData.daysSupply === 'string') {
+      submitData.daysSupply = parseInt(submitData.daysSupply, 10) || undefined;
+    }
+    if (submitData.quantity === '' || submitData.quantity === null || submitData.quantity === undefined) {
+      submitData.quantity = undefined;
+    } else if (typeof submitData.quantity === 'string') {
+      submitData.quantity = parseInt(submitData.quantity, 10) || undefined;
+    }
+    
     // Ensure we only send the relevant field based on inputMode
     if (inputMode === 'drugName') {
       submitData.ndc = undefined;
     } else {
       submitData.drugName = undefined;
+    }
+    
+    // If quantity is provided, clear SIG and daysSupply (they're not needed)
+    if (submitData.quantity && submitData.quantity > 0) {
+      submitData.sig = undefined;
+      submitData.daysSupply = undefined;
+    } else {
+      // If using calculated mode, ensure we have both SIG and daysSupply
+      submitData.quantity = undefined;
     }
     
     onSubmit(submitData);
@@ -110,7 +161,8 @@ export function CalculationForm({ onSubmit, loading = false, initialValues = {} 
       drugName: '',
       ndc: '',
       sig: '',
-      daysSupply: ''
+      daysSupply: '',
+      quantity: ''
     });
     setInputMode('drugName');
   };
@@ -131,8 +183,9 @@ export function CalculationForm({ onSubmit, loading = false, initialValues = {} 
         onSubmitWithValidation(e);
       }}
       sx={{
-        maxWidth: '600px',
-        width: '100%'
+        maxWidth: '800px',
+        width: '100%',
+        margin: '0 auto' // Center the form
       }}
     >
       {/* Input Mode Selection */}
@@ -211,53 +264,162 @@ export function CalculationForm({ onSubmit, loading = false, initialValues = {} 
         />
       )}
 
-      {/* SIG Input */}
-      <Controller
-        name="sig"
-        control={control}
-        render={({ field }) => (
-          <TextField
-            {...field}
-            label="Prescription Directions (SIG)"
-            placeholder="Take 1 tablet twice daily"
-            fullWidth
-            required
-            multiline
-            rows={2}
-            error={!!errors.sig}
-            helperText={errors.sig?.message || 'Example: Take 1 tablet twice daily'}
-            sx={{ mb: 3 }}
-            disabled={loading}
-          />
-        )}
-      />
+      {/* SIG, Days Supply, and Quantity Section with OR divider */}
+      <Box sx={{ mb: 3 }}>
+        <Box sx={{ 
+          display: 'grid', 
+          gridTemplateColumns: { xs: '1fr', md: '1fr auto 1fr' },
+          gap: 2,
+          alignItems: 'flex-start'
+        }}>
+          {/* Left side: SIG and Days Supply */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Controller
+              name="sig"
+              control={control}
+              render={({ field }) => {
+                const quantity = watch('quantity');
+                // Handle both string and number types
+                const quantityValue = typeof quantity === 'string' 
+                  ? (quantity === '' ? 0 : parseInt(quantity, 10))
+                  : (quantity || 0);
+                const hasQuantity = quantityValue > 0;
+                
+                // Don't show errors for SIG when quantity is provided
+                const showError = hasQuantity ? false : !!errors.sig;
+                
+                return (
+                  <TextField
+                    {...field}
+                    label="Prescription Directions (SIG)"
+                    placeholder="Take 1 tablet twice daily"
+                    fullWidth
+                    required={!hasQuantity}
+                    multiline
+                    rows={2}
+                    error={showError}
+                    helperText={showError ? errors.sig?.message : (hasQuantity ? 'Optional when quantity is provided directly' : 'Required to calculate quantity')}
+                    disabled={loading || hasQuantity}
+                  />
+                );
+              }}
+            />
 
-      {/* Days Supply Input */}
-      <Controller
-        name="daysSupply"
-        control={control}
-        render={({ field }) => (
-          <TextField
-            {...field}
-            label="Days Supply"
-            type="number"
-            placeholder="30"
-            fullWidth
-            error={!!errors.daysSupply}
-            helperText={errors.daysSupply?.message || 'Optional - leave blank if not calculating quantity'}
-            sx={{ mb: 3 }}
-            disabled={loading}
-            inputProps={{
-              min: 1,
-              max: 365
+            <Controller
+              name="daysSupply"
+              control={control}
+              render={({ field }) => {
+                const quantity = watch('quantity');
+                // Handle both string and number types
+                const quantityValue = typeof quantity === 'string' 
+                  ? (quantity === '' ? 0 : parseInt(quantity, 10))
+                  : (quantity || 0);
+                const hasQuantity = quantityValue > 0;
+                
+                // Don't show errors for daysSupply when quantity is provided
+                const showError = hasQuantity ? false : !!errors.daysSupply;
+                
+                return (
+                  <TextField
+                    {...field}
+                    label="Days Supply"
+                    type="number"
+                    placeholder="30"
+                    fullWidth
+                    value={field.value ?? ''}
+                    error={showError}
+                    helperText={showError ? errors.daysSupply?.message : (hasQuantity ? 'Optional when quantity is provided directly' : 'Required to calculate quantity from SIG')}
+                    disabled={loading || hasQuantity}
+                    inputProps={{
+                      min: 1,
+                      max: 365
+                    }}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      field.onChange(value === '' ? '' : parseInt(value, 10));
+                    }}
+                  />
+                );
+              }}
+            />
+          </Box>
+
+          {/* Middle: OR divider */}
+          <Box sx={{ 
+            display: { xs: 'none', md: 'flex' },
+            alignItems: 'center',
+            justifyContent: 'center',
+            pt: { xs: 0, md: 2 }
+          }}>
+            <Typography 
+              variant="h6" 
+              sx={{ 
+                color: 'text.secondary',
+                fontWeight: 500,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}
+            >
+              OR
+            </Typography>
+          </Box>
+
+          {/* Right side: Quantity (Direct Entry) */}
+          <Box>
+            <Controller
+              name="quantity"
+              control={control}
+              render={({ field }) => {
+                const sig = watch('sig');
+                const daysSupply = watch('daysSupply');
+                const hasSigAndDays = sig && sig.trim().length > 0 && daysSupply && daysSupply > 0;
+                
+                return (
+                  <TextField
+                    {...field}
+                    label="Quantity (Direct Entry)"
+                    type="number"
+                    placeholder="60"
+                    fullWidth
+                    value={field.value ?? ''}
+                    error={!!errors.quantity}
+                    helperText={errors.quantity?.message || (hasSigAndDays ? 'Optional - leave blank to calculate from SIG and days supply' : 'Enter quantity directly, or provide SIG and days supply to calculate')}
+                    disabled={loading}
+                    inputProps={{
+                      min: 1,
+                      max: 100000
+                    }}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      field.onChange(value === '' ? '' : parseInt(value, 10));
+                    }}
+                  />
+                );
+              }}
+            />
+          </Box>
+        </Box>
+
+        {/* Mobile: Show OR below on small screens */}
+        <Box sx={{ 
+          display: { xs: 'flex', md: 'none' },
+          alignItems: 'center',
+          justifyContent: 'center',
+          my: 2
+        }}>
+          <Typography 
+            variant="h6" 
+            sx={{ 
+              color: 'text.secondary',
+              fontWeight: 500,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
             }}
-            onChange={(e) => {
-              const value = e.target.value;
-              field.onChange(value === '' ? '' : parseInt(value, 10));
-            }}
-          />
-        )}
-      />
+          >
+            OR
+          </Typography>
+        </Box>
+      </Box>
 
       {/* Submit and Clear Buttons */}
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
@@ -265,7 +427,7 @@ export function CalculationForm({ onSubmit, loading = false, initialValues = {} 
           type="submit"
           variant="contained"
           fullWidth
-          disabled={loading || isSubmitting || !isValid}
+          disabled={loading || isSubmitting || !isFormValid}
           sx={{ flex: 1 }}
           startIcon={loading || isSubmitting ? <CircularProgress size={20} color="inherit" /> : null}
         >
@@ -284,33 +446,54 @@ export function CalculationForm({ onSubmit, loading = false, initialValues = {} 
       </Box>
 
       {/* Form-level error display */}
-      {Object.keys(errors).length > 0 && !loading && !isSubmitting && (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          <Typography variant="body2">
-            Please correct the errors above and try again.
-          </Typography>
-          {errors.drugName && (
-            <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
-              • {errors.drugName.message}
+      {(() => {
+        const quantity = watch('quantity');
+        const quantityValue = typeof quantity === 'string' 
+          ? (quantity === '' ? 0 : parseInt(quantity, 10))
+          : (quantity || 0);
+        const hasQuantity = quantityValue > 0;
+        
+        // Filter out errors for fields that are optional when quantity is provided
+        const relevantErrors = Object.keys(errors).filter(key => {
+          if (hasQuantity && (key === 'sig' || key === 'daysSupply')) {
+            return false; // Don't show errors for these when quantity is provided
+          }
+          return true;
+        });
+        
+        return relevantErrors.length > 0 && !loading && !isSubmitting ? (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            <Typography variant="body2">
+              Please correct the errors above and try again.
             </Typography>
-          )}
-          {errors.ndc && (
-            <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
-              • {errors.ndc.message}
-            </Typography>
-          )}
-          {errors.sig && (
-            <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
-              • {errors.sig.message}
-            </Typography>
-          )}
-          {errors.daysSupply && (
-            <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
-              • {errors.daysSupply.message}
-            </Typography>
-          )}
-        </Alert>
-      )}
+            {errors.drugName && (
+              <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
+                • {errors.drugName.message}
+              </Typography>
+            )}
+            {errors.ndc && (
+              <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
+                • {errors.ndc.message}
+              </Typography>
+            )}
+            {errors.sig && !hasQuantity && (
+              <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
+                • {errors.sig.message}
+              </Typography>
+            )}
+            {errors.daysSupply && !hasQuantity && (
+              <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
+                • {errors.daysSupply.message}
+              </Typography>
+            )}
+            {errors.quantity && (
+              <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
+                • {errors.quantity.message}
+              </Typography>
+            )}
+          </Alert>
+        ) : null;
+      })()}
     </Box>
   );
 }
