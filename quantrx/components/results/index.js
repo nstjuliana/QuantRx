@@ -5,8 +5,9 @@
  * Add exports here as results components are created.
  */
 
-// Example exports (add actual components as they are created):
-// export { ResultsDisplay } from './ResultsDisplay';
-// export { NDCCard } from './NDCCard';
-// export { AlternativeOptions } from './AlternativeOptions';
-// export { WarningsSection } from './WarningsSection';
+// Results component exports
+export { ResultsDisplay } from './ResultsDisplay';
+export { SummaryCard } from './SummaryCard';
+export { NDCCard } from './NDCCard';
+export { AlternativeOptions } from './AlternativeOptions';
+export { WarningsSection } from './WarningsSection';

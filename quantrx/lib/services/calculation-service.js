@@ -32,6 +32,10 @@ import { trackCalculation } from '../utils/performance.js';
 export async function runCalculation(input, options = {}) {
   const { userId = null, maxAlternatives = 5 } = options;
 
+  console.log('[CALC-SERVICE] ===== RUN CALCULATION START =====');
+  console.log('[CALC-SERVICE] Input:', JSON.stringify(input, null, 2));
+  console.log('[CALC-SERVICE] Options:', JSON.stringify(options, null, 2));
+
   // Start performance tracking
   const endPerformanceTracking = trackCalculation('full_calculation', input);
 
@@ -40,33 +44,60 @@ export async function runCalculation(input, options = {}) {
 
   try {
     // Step 1: Normalize drug (if drug name provided)
+    console.log('[CALC-SERVICE] Step 1: Normalizing drug...');
+    console.log('[CALC-SERVICE] Input has drugName?', !!input.drugName);
+    console.log('[CALC-SERVICE] Input has ndc?', !!input.ndc);
+    
     const normalizationResult = await normalizeDrug(input, userId);
+    console.log('[CALC-SERVICE] Normalization result:', JSON.stringify(normalizationResult, null, 2));
+    
     if (!normalizationResult.success) {
-      return createErrorResult(
+      console.log('[CALC-SERVICE] Normalization failed, creating error result');
+      const errorResult = createErrorResult(
         'normalization_failed',
         normalizationResult.error,
         { step: 'normalization', input }
       );
+      console.log('[CALC-SERVICE] Error result created:', JSON.stringify(errorResult, null, 2));
+      return errorResult;
     }
+    
+    console.log('[CALC-SERVICE] Normalization succeeded');
 
     // Step 2: Parse SIG
+    console.log('[CALC-SERVICE] Step 2: Parsing SIG...');
+    console.log('[CALC-SERVICE] SIG input:', input.sig);
+    
     const sigResult = await parseSIGStep(input.sig, userId);
+    console.log('[CALC-SERVICE] SIG parsing result:', JSON.stringify(sigResult, null, 2));
+    
     if (!sigResult.success) {
-      return createErrorResult(
+      console.log('[CALC-SERVICE] SIG parsing failed, creating error result');
+      const errorResult = createErrorResult(
         'sig_parsing_failed',
         sigResult.error,
         { step: 'sig_parsing', input, normalization: normalizationResult.data }
       );
+      console.log('[CALC-SERVICE] Error result created:', JSON.stringify(errorResult, null, 2));
+      return errorResult;
     }
+    
+    console.log('[CALC-SERVICE] SIG parsing succeeded');
 
     // Step 3: Calculate quantity (if days supply provided)
+    console.log('[CALC-SERVICE] Step 3: Calculating quantity...');
+    console.log('[CALC-SERVICE] Days supply:', input.daysSupply);
+    
     const quantityResult = await calculateQuantityStep(
       sigResult.data,
       input.daysSupply,
       userId
     );
+    console.log('[CALC-SERVICE] Quantity calculation result:', JSON.stringify(quantityResult, null, 2));
+    
     if (!quantityResult.success) {
-      return createErrorResult(
+      console.log('[CALC-SERVICE] Quantity calculation failed, creating error result');
+      const errorResult = createErrorResult(
         'quantity_calculation_failed',
         quantityResult.error,
         {
@@ -76,15 +107,25 @@ export async function runCalculation(input, options = {}) {
           sig: sigResult.data
         }
       );
+      console.log('[CALC-SERVICE] Error result created:', JSON.stringify(errorResult, null, 2));
+      return errorResult;
     }
+    
+    console.log('[CALC-SERVICE] Quantity calculation succeeded');
 
     // Step 4: Fetch NDCs
-    const ndcResult = await fetchNDCs(
-      normalizationResult.data?.rxcui || input.ndc,
-      userId
-    );
+    console.log('[CALC-SERVICE] Step 4: Fetching NDCs...');
+    const ndcIdentifier = normalizationResult.data?.rxcui || input.ndc;
+    console.log('[CALC-SERVICE] NDC identifier:', ndcIdentifier);
+    console.log('[CALC-SERVICE] Using rxcui?', !!normalizationResult.data?.rxcui);
+    console.log('[CALC-SERVICE] Using ndc?', !!input.ndc);
+    
+    const ndcResult = await fetchNDCs(ndcIdentifier, userId);
+    console.log('[CALC-SERVICE] NDC fetch result:', JSON.stringify(ndcResult, null, 2));
+    
     if (!ndcResult.success) {
-      return createErrorResult(
+      console.log('[CALC-SERVICE] NDC fetch failed, creating error result');
+      const errorResult = createErrorResult(
         'ndc_fetch_failed',
         ndcResult.error,
         {
@@ -95,17 +136,28 @@ export async function runCalculation(input, options = {}) {
           quantity: quantityResult.data
         }
       );
+      console.log('[CALC-SERVICE] Error result created:', JSON.stringify(errorResult, null, 2));
+      return errorResult;
     }
+    
+    console.log('[CALC-SERVICE] NDC fetch succeeded');
+    console.log('[CALC-SERVICE] NDCs found:', ndcResult.data?.length || 0);
 
     // Step 5: Match optimal NDCs
+    console.log('[CALC-SERVICE] Step 5: Matching optimal NDCs...');
+    const quantity = quantityResult.data?.quantity || 0;
+    console.log('[CALC-SERVICE] Quantity for matching:', quantity);
+    
     const matchingResult = await matchNDCsStep(
-      quantityResult.data?.quantity || 0,
+      quantity,
       ndcResult.data,
       { maxAlternatives },
       userId
     );
+    console.log('[CALC-SERVICE] Matching result:', JSON.stringify(matchingResult, null, 2));
 
     // Assemble final result
+    console.log('[CALC-SERVICE] Assembling final result...');
     const finalResult = assembleCalculationResult({
       input,
       normalization: normalizationResult.data,
@@ -120,6 +172,9 @@ export async function runCalculation(input, options = {}) {
         ...(matchingResult.warnings || [])
       ]
     });
+    console.log('[CALC-SERVICE] Final result assembled:', JSON.stringify(finalResult, null, 2));
+    console.log('[CALC-SERVICE] Final result status:', finalResult.status);
+    console.log('[CALC-SERVICE] Final result success:', finalResult.success);
 
     // Log successful completion
     logCalculationCompleted(requestId, finalResult, 0, userId);
@@ -127,9 +182,17 @@ export async function runCalculation(input, options = {}) {
     // End performance tracking
     endPerformanceTracking(finalResult, null);
 
+    console.log('[CALC-SERVICE] ===== RUN CALCULATION SUCCESS =====');
     return finalResult;
 
   } catch (error) {
+    console.error('[CALC-SERVICE] ===== RUN CALCULATION ERROR =====');
+    console.error('[CALC-SERVICE] Error type:', error.constructor.name);
+    console.error('[CALC-SERVICE] Error message:', error.message);
+    console.error('[CALC-SERVICE] Error stack:', error.stack);
+    console.error('[CALC-SERVICE] Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+    console.error('[CALC-SERVICE] Input at error:', JSON.stringify(input, null, 2));
+    
     // Log error
     logEvent('CALCULATION_ERROR', {
       requestId,
@@ -141,11 +204,14 @@ export async function runCalculation(input, options = {}) {
     // End performance tracking with error
     endPerformanceTracking(null, error);
 
-    return createErrorResult(
+    const errorResult = createErrorResult(
       'unexpected_error',
       `Calculation failed: ${error.message}`,
       { requestId, input }
     );
+    console.error('[CALC-SERVICE] Error result created:', JSON.stringify(errorResult, null, 2));
+    console.error('[CALC-SERVICE] ===== RUN CALCULATION ERROR END =====');
+    return errorResult;
   }
 }
 
@@ -459,6 +525,9 @@ export async function matchNDCsStep(quantity, ndcData, options = {}, userId = nu
  * @returns {Object} Complete calculation result
  */
 function assembleCalculationResult(components) {
+  console.log('[CALC-SERVICE] assembleCalculationResult called');
+  console.log('[CALC-SERVICE] Components:', JSON.stringify(components, null, 2));
+  
   const {
     input,
     normalization,
@@ -475,12 +544,19 @@ function assembleCalculationResult(components) {
   const hasWarnings = warnings.length > 0;
   const hasRecommendations = recommendations && recommendations.length > 0;
 
+  console.log('[CALC-SERVICE] hasErrors:', hasErrors);
+  console.log('[CALC-SERVICE] hasWarnings:', hasWarnings);
+  console.log('[CALC-SERVICE] hasRecommendations:', hasRecommendations);
+  console.log('[CALC-SERVICE] warnings:', JSON.stringify(warnings, null, 2));
+
   let status = 'success';
   if (hasErrors) status = 'error';
   else if (hasWarnings && !hasRecommendations) status = 'partial';
   else if (hasWarnings) status = 'partial';
 
-  return {
+  console.log('[CALC-SERVICE] Calculated status:', status);
+
+  const result = {
     id: generateCalculationId(),
     timestamp: new Date().toISOString(),
     status,
@@ -499,6 +575,12 @@ function assembleCalculationResult(components) {
     warnings,
     success: !hasErrors
   };
+  
+  console.log('[CALC-SERVICE] Assembled result:', JSON.stringify(result, null, 2));
+  console.log('[CALC-SERVICE] Result status:', result.status);
+  console.log('[CALC-SERVICE] Result success:', result.success);
+  
+  return result;
 }
 
 /**
@@ -509,7 +591,12 @@ function assembleCalculationResult(components) {
  * @returns {Object} Error result
  */
 function createErrorResult(errorType, message, context = {}) {
-  return {
+  console.log('[CALC-SERVICE] createErrorResult called');
+  console.log('[CALC-SERVICE] errorType:', errorType);
+  console.log('[CALC-SERVICE] message:', message);
+  console.log('[CALC-SERVICE] context:', JSON.stringify(context, null, 2));
+  
+  const errorResult = {
     id: generateCalculationId(),
     timestamp: new Date().toISOString(),
     status: 'error',
@@ -527,6 +614,9 @@ function createErrorResult(errorType, message, context = {}) {
       data: context
     }]
   };
+  
+  console.log('[CALC-SERVICE] Error result created:', JSON.stringify(errorResult, null, 2));
+  return errorResult;
 }
 
 /**

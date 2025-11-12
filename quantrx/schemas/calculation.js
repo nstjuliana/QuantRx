@@ -11,17 +11,47 @@
 import { z } from 'zod';
 
 /**
- * NDC format validation: 11 digits with optional hyphens (e.g., 12345-678-90 or 1234567890)
+ * NDC format validation: Supports 10 or 11 digits in four official FDA formats:
+ * - 5-4-1: XXXXX-XXXX-X (e.g., 12345-6789-0)
+ * - 5-3-2: XXXXX-XXX-XX (e.g., 12345-678-90)
+ * - 4-4-2: XXXX-XXXX-XX (e.g., 1234-5678-90)
+ * - 6-3-1: XXXXXX-XXX-X (e.g., 123456-789-0)
+ * 
+ * 11-digit versions include a leading zero (HIPAA billing standard)
+ * Hyphens are optional in input but normalized in output
  */
-const ndcRegex = /^(\d{5}-?\d{3}-?\d{2}|\d{11})$/;
+const ndcRegex = /^(\d{5}-?\d{4}-?\d{1}|\d{5}-?\d{3}-?\d{2}|\d{4}-?\d{4}-?\d{2}|\d{6}-?\d{3}-?\d{1}|\d{10}|\d{11})$/;
 
 /**
  * Custom NDC validation function
+ * Validates that NDC is 10 or 11 digits and matches one of the four official formats
+ * Checks formats in order of specificity to avoid false positives
  */
 const validateNDC = (value) => {
   if (!value) return true; // Allow empty for optional fields
+  
+  // Remove hyphens for validation
   const cleanNDC = value.replace(/-/g, '');
-  return cleanNDC.length === 11 && /^\d+$/.test(cleanNDC);
+  
+  // Must be exactly 10 or 11 digits (all numeric)
+  if (!/^\d{10,11}$/.test(cleanNDC)) {
+    return false;
+  }
+  
+  // Normalize to 11 digits by adding leading zero if needed
+  const normalizedNDC = cleanNDC.length === 10 ? `0${cleanNDC}` : cleanNDC;
+  
+  // Check formats in order of specificity to avoid false matches
+  // Format: 6-3-1 (most specific - 6 digits at start)
+  if (/^\d{6}\d{3}\d{1}$/.test(normalizedNDC)) return true;
+  // Format: 5-4-1 (5 digits, then 4 digits)
+  if (/^\d{5}\d{4}\d{1}$/.test(normalizedNDC)) return true;
+  // Format: 5-3-2 (5 digits, then 3 digits)
+  if (/^\d{5}\d{3}\d{2}$/.test(normalizedNDC)) return true;
+  // Format: 4-4-2 (only valid if normalized starts with 0 and rest is 4-4-2)
+  if (/^0\d{4}\d{4}\d{2}$/.test(normalizedNDC)) return true;
+  
+  return false;
 };
 
 /**
@@ -53,7 +83,7 @@ export const CalculationFormSchema = z.object({
     .optional()
     .refine(
       validateNDC,
-      'NDC must be 11 digits (format: 12345-678-90)'
+      'NDC must be 10 or 11 digits in one of these formats: 12345-6789-0, 12345-678-90, 1234-5678-90, or 123456-789-0'
     ),
 
   sig: z

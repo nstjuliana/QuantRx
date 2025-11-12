@@ -5,7 +5,5 @@
  * Add exports here as UI components are created.
  */
 
-// Example exports (add actual components as they are created):
-// export { Button } from './Button';
-// export { Input } from './Input';
-// export { Card } from './Card';
+// UI component exports
+export { StatusBadge } from './StatusBadge';

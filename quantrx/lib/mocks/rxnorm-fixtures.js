@@ -111,6 +111,26 @@ export const RXNORM_DRUG_FIXTURES = {
     language: 'ENG',
     suppress: 'N',
     umlscui: 'C0074554'
+  },
+
+  'ozempic': {
+    rxcui: '198045',
+    name: 'semaglutide',
+    synonym: 'Ozempic',
+    tty: 'SCD',
+    language: 'ENG',
+    suppress: 'N',
+    umlscui: 'C0000000'
+  },
+
+  'semaglutide': {
+    rxcui: '198045',
+    name: 'semaglutide',
+    synonym: 'Ozempic',
+    tty: 'SCD',
+    language: 'ENG',
+    suppress: 'N',
+    umlscui: 'C0000000'
   }
 };
 
@@ -186,6 +206,34 @@ export const RXNORM_SEARCH_RESPONSES = {
   '': {
     drugGroup: {
       conceptGroup: []
+    }
+  },
+
+  // Ozempic search
+  'ozempic': {
+    drugGroup: {
+      conceptGroup: [
+        {
+          tty: 'SCD',
+          conceptProperties: [
+            RXNORM_DRUG_FIXTURES['ozempic']
+          ]
+        }
+      ]
+    }
+  },
+
+  // Semaglutide search (generic name for Ozempic)
+  'semaglutide': {
+    drugGroup: {
+      conceptGroup: [
+        {
+          tty: 'SCD',
+          conceptProperties: [
+            RXNORM_DRUG_FIXTURES['semaglutide']
+          ]
+        }
+      ]
     }
   }
 };

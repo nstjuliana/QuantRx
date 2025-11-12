@@ -60,12 +60,30 @@ export async function searchDrugByName(drugName, options = {}) {
     let result;
 
     if (isMockMode()) {
+      console.log('[RXNORM-API] ===== MOCK MODE =====');
+      console.log('[RXNORM-API] Mock mode enabled, using mock data');
+      console.log('[RXNORM-API] Would call: GET', `${getApiBaseUrl()}/drugs.json`);
+      console.log('[RXNORM-API] Parameters:', {
+        name: drugName,
+        limit: limit
+      });
       // Use mock data
       await simulateApiDelay();
       result = getMockSearchResponse(drugName);
     } else {
       // Real API call
       const url = `${getApiBaseUrl()}/drugs.json?name=${encodeURIComponent(drugName)}&limit=${limit}`;
+      console.log('[RXNORM-API] ===== API CALL START =====');
+      console.log('[RXNORM-API] Method: GET');
+      console.log('[RXNORM-API] Full URL:', url);
+      console.log('[RXNORM-API] Base URL:', getApiBaseUrl());
+      console.log('[RXNORM-API] Endpoint: /drugs.json');
+      console.log('[RXNORM-API] Query Parameters:', {
+        name: drugName,
+        limit: limit
+      });
+      console.log('[RXNORM-API] Encoded URL:', url);
+      
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -74,11 +92,18 @@ export async function searchDrugByName(drugName, options = {}) {
         }
       });
 
+      console.log('[RXNORM-API] Response status:', response.status);
+      console.log('[RXNORM-API] Response statusText:', response.statusText);
+      console.log('[RXNORM-API] Response headers:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
+        console.error('[RXNORM-API] API call failed:', response.status, response.statusText);
         throw new Error(`RxNorm API error: ${response.status} ${response.statusText}`);
       }
 
       result = await response.json();
+      console.log('[RXNORM-API] Response data (first 500 chars):', JSON.stringify(result).substring(0, 500));
+      console.log('[RXNORM-API] ===== API CALL END =====');
     }
 
     // Log successful API call
@@ -153,12 +178,23 @@ export async function getDrugByRxCUI(rxcui, options = {}) {
     let result;
 
     if (isMockMode()) {
+      console.log('[RXNORM-API] ===== MOCK MODE (RxCUI) =====');
+      console.log('[RXNORM-API] Mock mode enabled, using mock data');
+      console.log('[RXNORM-API] Would call: GET', `${getApiBaseUrl()}/rxcui/${rxcui}.json`);
+      console.log('[RXNORM-API] Parameters:', { rxcui });
       // Use mock data
       await simulateApiDelay();
       result = getMockNDCResponse(rxcui);
     } else {
       // Real API call
       const url = `${getApiBaseUrl()}/rxcui/${rxcui}.json`;
+      console.log('[RXNORM-API] ===== API CALL START (RxCUI) =====');
+      console.log('[RXNORM-API] Method: GET');
+      console.log('[RXNORM-API] Full URL:', url);
+      console.log('[RXNORM-API] Base URL:', getApiBaseUrl());
+      console.log('[RXNORM-API] Endpoint: /rxcui/{rxcui}.json');
+      console.log('[RXNORM-API] Path Parameters:', { rxcui });
+      
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -167,17 +203,24 @@ export async function getDrugByRxCUI(rxcui, options = {}) {
         }
       });
 
+      console.log('[RXNORM-API] Response status:', response.status);
+      console.log('[RXNORM-API] Response statusText:', response.statusText);
+
       if (!response.ok) {
         if (response.status === 404) {
+          console.log('[RXNORM-API] RxCUI not found (404)');
           // RxCUI not found
           logApiCallCompleted(`${getApiBaseUrl()}/rxcui/${rxcui}.json`, 0, 404, userId);
           endPerformanceTracking({ success: true, found: false });
           return null;
         }
+        console.error('[RXNORM-API] API call failed:', response.status, response.statusText);
         throw new Error(`RxNorm API error: ${response.status} ${response.statusText}`);
       }
 
       result = await response.json();
+      console.log('[RXNORM-API] Response data (first 500 chars):', JSON.stringify(result).substring(0, 500));
+      console.log('[RXNORM-API] ===== API CALL END (RxCUI) =====');
     }
 
     // Log successful API call
@@ -215,17 +258,52 @@ export async function getDrugByRxCUI(rxcui, options = {}) {
 function extractDrugFromResponse(response) {
   try {
     const conceptGroups = response?.drugGroup?.conceptGroup || [];
+    
+    console.log('[RXNORM-API] extractDrugFromResponse - conceptGroups:', conceptGroups.map(g => ({
+      tty: g.tty,
+      count: g.conceptProperties?.length || 0
+    })));
 
-    // Find the first SCD (Semantic Clinical Drug) group
-    const scdGroup = conceptGroups.find(group =>
+    // Priority order: SCD (Semantic Clinical Drug) > SBD (Semantic Branded Drug) > other types
+    // SCD is preferred for generic drugs, SBD for branded drugs
+    const validTypes = ['SCD', 'SBD'];
+    
+    // Try to find SCD first (preferred)
+    let selectedGroup = conceptGroups.find(group =>
       group.tty === 'SCD' && group.conceptProperties?.length > 0
     );
+    
+    // Fall back to SBD if SCD not found
+    if (!selectedGroup) {
+      selectedGroup = conceptGroups.find(group =>
+        group.tty === 'SBD' && group.conceptProperties?.length > 0
+      );
+    }
+    
+    // If still not found, try any group with conceptProperties
+    if (!selectedGroup) {
+      selectedGroup = conceptGroups.find(group =>
+        group.conceptProperties?.length > 0
+      );
+    }
 
-    if (!scdGroup) {
+    if (!selectedGroup) {
+      console.log('[RXNORM-API] No valid concept group found');
       return null;
     }
 
-    const drug = scdGroup.conceptProperties[0];
+    console.log('[RXNORM-API] Selected concept group:', {
+      tty: selectedGroup.tty,
+      count: selectedGroup.conceptProperties.length
+    });
+
+    const drug = selectedGroup.conceptProperties[0];
+    
+    console.log('[RXNORM-API] Extracted drug:', {
+      rxcui: drug.rxcui,
+      name: drug.name,
+      tty: drug.tty
+    });
 
     return {
       rxcui: drug.rxcui,
@@ -237,7 +315,8 @@ function extractDrugFromResponse(response) {
       umlscui: drug.umlscui
     };
   } catch (error) {
-    console.error('Failed to extract drug from RxNorm response:', error);
+    console.error('[RXNORM-API] Failed to extract drug from RxNorm response:', error);
+    console.error('[RXNORM-API] Error stack:', error.stack);
     return null;
   }
 }

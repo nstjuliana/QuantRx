@@ -68,6 +68,13 @@ export async function getNDCsByDrugName(drugName, options = {}) {
     let response;
 
     if (isMockMode()) {
+      console.log('[FDA-API] ===== MOCK MODE (Drug Name) =====');
+      console.log('[FDA-API] Mock mode enabled, using mock data');
+      console.log('[FDA-API] Would call: GET', getApiBaseUrl());
+      console.log('[FDA-API] Parameters:', {
+        search: `brand_name:"${drugName}"`,
+        limit: limit
+      });
       // Use mock data
       await simulateApiDelay();
       response = getMockFDASearchResponse(drugName);
@@ -75,6 +82,17 @@ export async function getNDCsByDrugName(drugName, options = {}) {
       // Real API call
       const searchQuery = `brand_name:"${drugName}"`;
       const url = `${getApiBaseUrl()}?search=${encodeURIComponent(searchQuery)}&limit=${limit}`;
+      
+      console.log('[FDA-API] ===== API CALL START (Drug Name) =====');
+      console.log('[FDA-API] Method: GET');
+      console.log('[FDA-API] Full URL:', url);
+      console.log('[FDA-API] Base URL:', getApiBaseUrl());
+      console.log('[FDA-API] Query Parameters:', {
+        search: searchQuery,
+        limit: limit
+      });
+      console.log('[FDA-API] Encoded search query:', encodeURIComponent(searchQuery));
+      console.log('[FDA-API] Encoded URL:', url);
 
       const apiResponse = await fetch(url, {
         method: 'GET',
@@ -84,11 +102,20 @@ export async function getNDCsByDrugName(drugName, options = {}) {
         }
       });
 
+      console.log('[FDA-API] Response status:', apiResponse.status);
+      console.log('[FDA-API] Response statusText:', apiResponse.statusText);
+      console.log('[FDA-API] Response headers:', Object.fromEntries(apiResponse.headers.entries()));
+
       if (!apiResponse.ok) {
+        console.error('[FDA-API] API call failed:', apiResponse.status, apiResponse.statusText);
         throw new Error(`FDA API error: ${apiResponse.status} ${apiResponse.statusText}`);
       }
 
       response = await apiResponse.json();
+      console.log('[FDA-API] Response meta:', JSON.stringify(response.meta || {}, null, 2));
+      console.log('[FDA-API] Response results count:', response.results?.length || 0);
+      console.log('[FDA-API] Response data (first 1000 chars):', JSON.stringify(response).substring(0, 1000));
+      console.log('[FDA-API] ===== API CALL END (Drug Name) =====');
     }
 
     // Process and categorize NDCs
@@ -142,7 +169,7 @@ export async function getNDCsByRxCUI(rxcui, options = {}) {
   });
 
   // Log API call start
-  logApiCallStart(`${getApiBaseUrl()}?search=rxcui:"${rxcui}"`, {
+  logApiCallStart(`${getApiBaseUrl()}?search=openfda.rxcui:"${rxcui}"`, {
     method: 'GET'
   }, userId);
 
@@ -150,6 +177,13 @@ export async function getNDCsByRxCUI(rxcui, options = {}) {
     let response;
 
     if (isMockMode()) {
+      console.log('[FDA-API] ===== MOCK MODE (RxCUI) =====');
+      console.log('[FDA-API] Mock mode enabled, using mock data');
+      console.log('[FDA-API] Would call: GET', getApiBaseUrl());
+      console.log('[FDA-API] Parameters:', {
+        search: `openfda.rxcui:"${rxcui}"`,
+        limit: 100
+      });
       // Use mock data - simulate search by RxCUI
       await simulateApiDelay();
       // For mock mode, we'll use drug name search as proxy
@@ -161,9 +195,21 @@ export async function getNDCsByRxCUI(rxcui, options = {}) {
         results: [] // Will be populated by processFDAResponse based on RxCUI
       };
     } else {
-      // Real API call
-      const searchQuery = `rxcui:"${rxcui}"`;
+      // Real API call - FDA API uses openfda.rxcui field
+      const searchQuery = `openfda.rxcui:"${rxcui}"`;
       const url = `${getApiBaseUrl()}?search=${encodeURIComponent(searchQuery)}&limit=100`;
+      
+      console.log('[FDA-API] ===== API CALL START (RxCUI) =====');
+      console.log('[FDA-API] Method: GET');
+      console.log('[FDA-API] Full URL:', url);
+      console.log('[FDA-API] Base URL:', getApiBaseUrl());
+      console.log('[FDA-API] Query Parameters:', {
+        search: searchQuery,
+        limit: 100
+      });
+      console.log('[FDA-API] Encoded search query:', encodeURIComponent(searchQuery));
+      console.log('[FDA-API] Encoded URL:', url);
+      console.log('[FDA-API] RxCUI being searched:', rxcui);
 
       const apiResponse = await fetch(url, {
         method: 'GET',
@@ -173,11 +219,20 @@ export async function getNDCsByRxCUI(rxcui, options = {}) {
         }
       });
 
+      console.log('[FDA-API] Response status:', apiResponse.status);
+      console.log('[FDA-API] Response statusText:', apiResponse.statusText);
+      console.log('[FDA-API] Response headers:', Object.fromEntries(apiResponse.headers.entries()));
+
       if (!apiResponse.ok) {
+        console.error('[FDA-API] API call failed:', apiResponse.status, apiResponse.statusText);
         throw new Error(`FDA API error: ${apiResponse.status} ${apiResponse.statusText}`);
       }
 
       response = await apiResponse.json();
+      console.log('[FDA-API] Response meta:', JSON.stringify(response.meta || {}, null, 2));
+      console.log('[FDA-API] Response results count:', response.results?.length || 0);
+      console.log('[FDA-API] Response data (first 1000 chars):', JSON.stringify(response).substring(0, 1000));
+      console.log('[FDA-API] ===== API CALL END (RxCUI) =====');
     }
 
     // Process and categorize NDCs
@@ -188,7 +243,7 @@ export async function getNDCsByRxCUI(rxcui, options = {}) {
 
     // Log audit event
     await logApiCall('fda', 'ndc.json', {
-      search: `rxcui:${rxcui}`,
+      search: `openfda.rxcui:${rxcui}`,
       includeInactive
     }, userId);
 
@@ -273,6 +328,17 @@ export async function validateNDC(ndc, options = {}) {
       // Real API call
       const searchQuery = `product_ndc:"${ndc}"`;
       const url = `${getApiBaseUrl()}?search=${encodeURIComponent(searchQuery)}&limit=1`;
+      
+      console.log('[FDA-API] ===== API CALL START (NDC Validation) =====');
+      console.log('[FDA-API] Method: GET');
+      console.log('[FDA-API] Full URL:', url);
+      console.log('[FDA-API] Base URL:', getApiBaseUrl());
+      console.log('[FDA-API] Query Parameters:', {
+        search: searchQuery,
+        limit: 1
+      });
+      console.log('[FDA-API] Encoded search query:', encodeURIComponent(searchQuery));
+      console.log('[FDA-API] Encoded URL:', url);
 
       const apiResponse = await fetch(url, {
         method: 'GET',
@@ -282,11 +348,20 @@ export async function validateNDC(ndc, options = {}) {
         }
       });
 
+      console.log('[FDA-API] Response status:', apiResponse.status);
+      console.log('[FDA-API] Response statusText:', apiResponse.statusText);
+      console.log('[FDA-API] Response headers:', Object.fromEntries(apiResponse.headers.entries()));
+
       if (!apiResponse.ok) {
+        console.error('[FDA-API] API call failed:', apiResponse.status, apiResponse.statusText);
         throw new Error(`FDA API error: ${apiResponse.status} ${apiResponse.statusText}`);
       }
 
       response = await apiResponse.json();
+      console.log('[FDA-API] Response meta:', JSON.stringify(response.meta || {}, null, 2));
+      console.log('[FDA-API] Response results count:', response.results?.length || 0);
+      console.log('[FDA-API] Response data (first 1000 chars):', JSON.stringify(response).substring(0, 1000));
+      console.log('[FDA-API] ===== API CALL END (NDC Validation) =====');
     }
 
     // Process validation result
@@ -448,6 +523,12 @@ function extractPackageSize(description) {
 
 /**
  * Validate NDC format
+ * Supports 10 or 11 digits in four official FDA formats:
+ * - 5-4-1: XXXXX-XXXX-X (e.g., 12345-6789-0)
+ * - 5-3-2: XXXXX-XXX-XX (e.g., 12345-678-90)
+ * - 4-4-2: XXXX-XXXX-XX (e.g., 1234-5678-90)
+ * - 6-3-1: XXXXXX-XXX-X (e.g., 123456-789-0)
+ * 
  * @param {string} ndc - NDC to validate
  * @returns {boolean} True if valid format
  */
@@ -459,6 +540,23 @@ export function validateNDCFormat(ndc) {
   // Remove hyphens for validation
   const cleanNDC = ndc.replace(/-/g, '');
 
-  // Must be exactly 11 digits
-  return /^\d{11}$/.test(cleanNDC);
+  // Must be exactly 10 or 11 digits (all numeric)
+  if (!/^\d{10,11}$/.test(cleanNDC)) {
+    return false;
+  }
+
+  // Normalize to 11 digits by adding leading zero if needed
+  const normalizedNDC = cleanNDC.length === 10 ? `0${cleanNDC}` : cleanNDC;
+
+  // Check formats in order of specificity to avoid false matches
+  // Format: 6-3-1 (most specific - 6 digits at start)
+  if (/^\d{6}\d{3}\d{1}$/.test(normalizedNDC)) return true;
+  // Format: 5-4-1 (5 digits, then 4 digits)
+  if (/^\d{5}\d{4}\d{1}$/.test(normalizedNDC)) return true;
+  // Format: 5-3-2 (5 digits, then 3 digits)
+  if (/^\d{5}\d{3}\d{2}$/.test(normalizedNDC)) return true;
+  // Format: 4-4-2 (only valid if normalized starts with 0 and rest is 4-4-2)
+  if (/^0\d{4}\d{4}\d{2}$/.test(normalizedNDC)) return true;
+
+  return false;
 }

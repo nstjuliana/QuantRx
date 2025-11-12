@@ -10,29 +10,89 @@
 import { z } from 'zod';
 
 /**
- * NDC format validation: 11 digits with optional hyphens
- * Examples: 12345-678-90, 1234567890
+ * NDC format validation: Supports 10 or 11 digits in four official FDA formats:
+ * - 5-4-1: XXXXX-XXXX-X (e.g., 12345-6789-0)
+ * - 5-3-2: XXXXX-XXX-XX (e.g., 12345-678-90)
+ * - 4-4-2: XXXX-XXXX-XX (e.g., 1234-5678-90)
+ * - 6-3-1: XXXXXX-XXX-X (e.g., 123456-789-0)
+ * 
+ * 11-digit versions include a leading zero (HIPAA billing standard)
+ * Hyphens are optional in input but normalized in output
  */
-const ndcRegex = /^(\d{5}-?\d{3}-?\d{2}|\d{11})$/;
+const ndcRegex = /^(\d{5}-?\d{4}-?\d{1}|\d{5}-?\d{3}-?\d{2}|\d{4}-?\d{4}-?\d{2}|\d{6}-?\d{3}-?\d{1}|\d{10}|\d{11})$/;
+
+/**
+ * Normalize NDC to standard format
+ * Converts 10-digit to 11-digit by adding leading zero, then formats appropriately
+ */
+function normalizeNDCFormat(value) {
+  const clean = value.replace(/-/g, '');
+  const normalized = clean.length === 10 ? `0${clean}` : clean;
+  
+  // Determine format based on digit distribution
+  // Format: 5-4-1
+  if (/^\d{5}\d{4}\d{1}$/.test(normalized)) {
+    return `${normalized.slice(0, 5)}-${normalized.slice(5, 9)}-${normalized.slice(9)}`;
+  }
+  // Format: 5-3-2
+  if (/^\d{5}\d{3}\d{2}$/.test(normalized)) {
+    return `${normalized.slice(0, 5)}-${normalized.slice(5, 8)}-${normalized.slice(8)}`;
+  }
+  // Format: 4-4-2 (when normalized, first digit is leading zero from 10-digit input)
+  if (/^0\d{4}\d{4}\d{2}$/.test(normalized)) {
+    // Remove leading zero for 4-4-2 format
+    const withoutLeadingZero = normalized.slice(1);
+    return `${withoutLeadingZero.slice(0, 4)}-${withoutLeadingZero.slice(4, 8)}-${withoutLeadingZero.slice(8)}`;
+  }
+  // Format: 6-3-1
+  if (/^\d{6}\d{3}\d{1}$/.test(normalized)) {
+    return `${normalized.slice(0, 6)}-${normalized.slice(6, 9)}-${normalized.slice(9)}`;
+  }
+  
+  // Default fallback (shouldn't reach here if validation works)
+  return normalized;
+}
+
+/**
+ * Validate NDC format
+ * Checks if the NDC matches one of the four official FDA formats
+ * Must check in order to avoid false positives (6-3-1, then 5-4-1, then 5-3-2, then 4-4-2)
+ */
+function validateNDCFormat(value) {
+  if (!value) return false;
+  const clean = value.replace(/-/g, '');
+  if (!/^\d{10,11}$/.test(clean)) return false;
+  
+  const normalized = clean.length === 10 ? `0${clean}` : clean;
+  
+  // Check formats in order of specificity to avoid false matches
+  // Format: 6-3-1 (most specific - 6 digits at start)
+  if (/^\d{6}\d{3}\d{1}$/.test(normalized)) return true;
+  // Format: 5-4-1 (5 digits, then 4 digits)
+  if (/^\d{5}\d{4}\d{1}$/.test(normalized)) return true;
+  // Format: 5-3-2 (5 digits, then 3 digits)
+  if (/^\d{5}\d{3}\d{2}$/.test(normalized)) return true;
+  // Format: 4-4-2 (only valid if normalized starts with 0 and rest is 4-4-2)
+  // This means original was 10 digits in 4-4-2 format
+  if (/^0\d{4}\d{4}\d{2}$/.test(normalized)) return true;
+  
+  return false;
+}
 
 /**
  * NDC validation with formatting
  */
 export const NDCFormatSchema = z
   .string()
-  .regex(ndcRegex, 'NDC must be 11 digits (format: 12345-678-90)')
-  .transform((value) => {
-    // Normalize to hyphenated format
-    const clean = value.replace(/-/g, '');
-    return `${clean.slice(0, 5)}-${clean.slice(5, 8)}-${clean.slice(8)}`;
-  });
+  .refine(validateNDCFormat, 'NDC must be 10 or 11 digits in one of these formats: 12345-6789-0, 12345-678-90, 1234-5678-90, or 123456-789-0')
+  .transform((value) => normalizeNDCFormat(value));
 
 /**
  * NDC validation without formatting (preserves original format)
  */
 export const NDCValidationSchema = z
   .string()
-  .regex(ndcRegex, 'NDC must be 11 digits (format: 12345-678-90)');
+  .refine(validateNDCFormat, 'NDC must be 10 or 11 digits in one of these formats: 12345-6789-0, 12345-678-90, 1234-5678-90, or 123456-789-0');
 
 /**
  * Schema for NDC search/filter parameters

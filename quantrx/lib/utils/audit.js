@@ -38,11 +38,9 @@ export async function logAudit(
 ) {
   try {
     // Get current user if not provided
-    let actualUserId = userId;
-    if (!actualUserId) {
-      const { data: { user } } = await supabase.auth.getUser();
-      actualUserId = user?.id || 'system';
-    }
+    // Note: We use Auth0 for auth, not Supabase auth, so we can't get user from supabase.auth
+    // If userId is not provided, set to null (database allows NULL for system actions)
+    let actualUserId = userId || null;
 
     // Mask sensitive data in metadata
     const safeMetadata = maskSensitiveData(metadata);
@@ -52,7 +50,7 @@ export async function logAudit(
 
     // Create audit log record
     const auditRecord = {
-      user_id: actualUserId,
+      user_id: actualUserId, // Can be null for system actions
       action,
       resource_type: resourceType,
       resource_id: resourceId,
@@ -63,8 +61,17 @@ export async function logAudit(
       created_at: new Date().toISOString()
     };
 
-    // Save to database
-    const { data, error } = await supabase
+    console.log('[AUDIT] Creating audit log:', {
+      action,
+      resourceType,
+      resourceId,
+      userId: actualUserId
+    });
+
+    // Save to database using admin client to bypass RLS
+    // Audit logs are system operations and should bypass RLS
+    const { supabaseAdmin } = await import('../api/supabase.js');
+    const { data, error } = await supabaseAdmin
       .from('audit_logs')
       .insert(auditRecord)
       .select()
@@ -72,10 +79,15 @@ export async function logAudit(
 
     if (error) {
       // Log the error but don't throw - audit logging should not break the main flow
-      console.error('Failed to save audit log:', error);
+      console.error('[AUDIT] Failed to save audit log:', error);
+      console.error('[AUDIT] Error code:', error.code);
+      console.error('[AUDIT] Error message:', error.message);
+      console.error('[AUDIT] Error details:', error.details);
+      console.error('[AUDIT] Audit record that failed:', JSON.stringify(auditRecord, null, 2));
       return null;
     }
 
+    console.log('[AUDIT] Audit log saved successfully:', data?.id);
     return data;
   } catch (error) {
     // Log the error but don't throw
@@ -87,22 +99,17 @@ export async function logAudit(
 /**
  * Log calculation creation
  * @param {string} calculationId - ID of the created calculation
- * @param {Object} inputs - Calculation input data
- * @param {string} [userId] - User who created the calculation
+ * @param {string} userId - User ID who created the calculation (UUID from users table)
  * @returns {Promise<Object>} Audit log record
  */
-export async function logCalculationCreated(calculationId, inputs, userId = null) {
+export async function logCalculationCreated(calculationId, userId) {
   return logAudit(
     AUDIT_ACTIONS.CALCULATION_CREATED,
     AUDIT_RESOURCE_TYPES.CALCULATION,
     calculationId,
     {
-      inputs: {
-        hasDrugName: !!inputs.drugName,
-        hasNdc: !!inputs.ndc,
-        sigLength: inputs.sig?.length || 0,
-        daysSupply: inputs.daysSupply
-      }
+      calculationId,
+      createdAt: new Date().toISOString()
     },
     userId
   );
